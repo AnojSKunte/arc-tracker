@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Personal skincare, supplement, and training tracker with an AI coach layer.">
+<meta name="theme-color" content="#2F6FED">
+<title>Arc — Stack &amp; Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --dawn-1:#2F6FED; --dawn-2:#8FD3FF;
+    --dusk-1:#1B3FBF; --dusk-2:#14297A;
+    --night-bg:#EEF3FF; --night-bg-2:#FFFFFF;
+    --card:#FFFFFF; --card-soft:#F3F6FF; --card-raised:#E8EEFF;
+    --line:#DCE4F8; --line-soft:#ECF0FA;
+    --text:#101E3B; --text-dim:#5B6A8C; --text-faint:#99A6C2;
+    --amber:#FF8A3D; --violet:#6F63D8; --mint:#12B58C; --danger:#E14C55;
+    --radius:20px; --radius-sm:13px;
+    --shadow: 0 10px 26px -10px rgba(16,32,61,0.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1100px 480px at 15% -8%, rgba(47,111,237,0.07), transparent 60%),
+      radial-gradient(900px 480px at 105% 0%, rgba(111,99,216,0.09), transparent 55%),
+      linear-gradient(180deg, var(--night-bg) 0%, var(--night-bg-2) 100%);
+    background-attachment: fixed;
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1,h2,h3,.display{font-family:'Space Grotesk', sans-serif;}
+  .app{max-width:480px;margin:0 auto;padding:22px 16px 96px;}
+  ::-webkit-scrollbar{display:none;}
+
+  /* Header / arc */
+  .header{padding:4px 4px 16px;}
+  .eyebrow{font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-faint); font-weight:600; margin-bottom:6px;}
+  .date-row{display:flex; align-items:baseline; justify-content:space-between;}
+  .date-row h1{font-size:27px; margin:0; font-weight:700; letter-spacing:-.01em;}
+  .streak{font-size:12.5px; color:var(--amber); font-weight:600; display:flex; align-items:center; gap:4px;}
+
+  .arc-card{
+    background:linear-gradient(160deg, var(--card) 0%, var(--card-soft) 100%);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 18px 8px; margin-top:14px; box-shadow:var(--shadow);
+    position:relative; overflow:hidden;
+  }
+  .arc-svg{width:100%; height:auto; display:block;}
+  .arc-caption{display:flex; justify-content:space-between; font-size:11px; color:var(--text-faint); margin-top:-6px; padding:0 6px 4px; font-weight:500;}
+
+  /* Tabs */
+  .tabs{display:flex; gap:4px; margin:18px 0 14px; background:var(--card-soft); border:1px solid var(--line); border-radius:15px; padding:4px; box-shadow: inset 0 1px 2px rgba(16,32,61,0.05);}
+  .tab{flex:1; text-align:center; padding:9px 2px; font-size:12px; font-weight:600; border-radius:11px; color:var(--text-dim); cursor:pointer; user-select:none; transition:.18s;}
+  .tab.active{background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; box-shadow:0 4px 14px -4px rgba(27,63,191,0.45);}
+
+  .view{display:none;}
+  .view.active{display:block; animation:fadeIn .25s ease;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  .section{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px 16px 6px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .section-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .section-title{font-size:13.5px; font-weight:700; display:flex; align-items:center; gap:8px; text-transform:uppercase; letter-spacing:.06em;}
+  .dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+  .dot.am{background:var(--amber);} .dot.pm{background:var(--violet);} .dot.sup{background:var(--mint);} .dot.coach{background:linear-gradient(135deg,var(--dawn-1),var(--dusk-1));}
+  .section-sub{font-size:11px; color:var(--text-faint); font-weight:500;}
+
+  .item{display:flex; align-items:flex-start; gap:12px; padding:10px 2px; border-bottom:1px solid var(--line-soft);}
+  .item:last-child{border-bottom:none;}
+  .check{width:22px; height:22px; border-radius:7px; border:2px solid var(--line); flex-shrink:0; margin-top:1px; cursor:pointer; position:relative; transition:.15s; background:transparent;}
+  .check.checked{background:var(--mint); border-color:var(--mint);}
+  .check.checked::after{content:'✓'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#0d3b30; font-size:14px; font-weight:700;}
+  .item-body{flex:1;}
+  .item-name{font-size:14.5px; font-weight:600; line-height:1.3;}
+  .item-name.done{color:var(--text-faint); text-decoration:line-through; text-decoration-color:var(--line);}
+  .item-note{font-size:12px; color:var(--text-dim); margin-top:2px; line-height:1.4;}
+  .item-tag{font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; margin-left:8px; white-space:nowrap; align-self:flex-start;}
+  .tag-optional{background:rgba(166,163,201,0.15); color:var(--text-dim);}
+  .tag-skip{background:rgba(255,122,144,0.15); color:var(--danger);}
+
+  .seg{display:flex; gap:6px; margin-bottom:14px;}
+  .seg button{flex:1; padding:10px 6px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--text-dim); font-family:'Inter'; font-size:13px; font-weight:600; cursor:pointer; transition:.15s;}
+  .seg button.active{background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; border-color:transparent;}
+
+  .week-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin:8px 0 4px;}
+  .day-cell{text-align:center; padding:8px 2px; border-radius:10px; font-size:11px; background:var(--card-soft);}
+  .day-cell .d{font-weight:700; color:var(--text-faint); font-size:10px; margin-bottom:4px;}
+  .day-cell .a{font-weight:600;}
+  .active-retinol{color:var(--violet);} .active-glycolic{color:var(--amber);} .active-niacinamide{color:var(--mint);}
+  .today-ring{outline:2px solid #ffffff33;}
+
+  .plan-line{font-size:13px; line-height:1.6; color:var(--text-dim); padding:8px 2px;}
+  .plan-line b{color:var(--text); font-weight:600;}
+
+  .stack-row{display:flex; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid var(--line-soft);}
+  .stack-row:last-child{border-bottom:none;}
+  .stack-row .label{flex:1; font-size:13.5px; font-weight:600;}
+  .icon-btn{width:34px; height:34px; border-radius:10px; border:1px solid var(--line); background:var(--card-soft); color:var(--text-dim); font-size:16px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
+  .icon-btn.danger{color:var(--danger);}
+  .add-row{display:flex; gap:8px; margin-top:10px;}
+  .add-row input[type=text]{flex:1; background:var(--card-soft); border:1px solid var(--line); border-radius:10px; padding:9px 10px; color:var(--text); font-family:'Inter'; font-size:13.5px;}
+  .add-row input[type=text]:focus{outline:none; border-color:var(--violet);}
+  .add-row button{border:none; border-radius:10px; padding:9px 14px; font-weight:700; background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; font-family:'Inter'; font-size:13px; cursor:pointer; white-space:nowrap;}
+
+  .hist-row{display:flex; align-items:center; justify-content:space-between; padding:10px 2px; border-bottom:1px solid var(--line-soft);}
+  .hist-row:last-child{border-bottom:none;}
+  .hist-date{font-size:13.5px; font-weight:600;}
+  .hist-bar{width:104px; height:8px; background:var(--card-soft); border-radius:6px; overflow:hidden;}
+  .hist-bar-fill{height:100%; background:linear-gradient(90deg, var(--dawn-1), var(--mint));}
+  .hist-pct{font-size:12px; color:var(--text-dim); width:36px; text-align:right;}
+  .stat-row{display:flex; gap:10px; margin-bottom:14px;}
+  .stat-card{flex:1; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; box-shadow:var(--shadow);}
+  .stat-num{font-size:21px; font-weight:700; font-family:'Space Grotesk';}
+  .stat-label{font-size:10px; color:var(--text-faint); margin-top:2px; text-transform:uppercase; letter-spacing:.05em;}
+
+  .empty{text-align:center; padding:30px 10px; color:var(--text-faint); font-size:13px;}
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--text); border:1px solid var(--line); color:#fff; padding:10px 18px; border-radius:30px; font-size:13px; font-weight:600; box-shadow:0 10px 24px rgba(16,32,61,0.22); opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:80; max-width:88%; text-align:center;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-4px);}
+
+  /* ---- Coach ---- */
+  .coach-mark{
+    width:30px; height:30px; border-radius:50%; position:relative;
+    background:conic-gradient(from 0deg, var(--dawn-1), var(--dawn-2), var(--violet), var(--dusk-1), var(--dawn-1));
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow:0 0 0 3px var(--card), 0 0 14px -3px rgba(47,111,237,0.45);
+  }
+  .coach-mark::after{content:''; width:12px; height:12px; border-radius:50%; background:var(--card); z-index:1;}
+  .coach-mark::before{
+    content:''; position:absolute; inset:-5px; border-radius:50%;
+    border:1.5px solid var(--dawn-1); opacity:0; animation:pulseRing 2.6s ease-out infinite;
+  }
+  @keyframes pulseRing{0%{transform:scale(0.85); opacity:.55;} 100%{transform:scale(1.35); opacity:0;}}
+  @media (prefers-reduced-motion: reduce){ .coach-mark::before{animation:none;} }
+  .gear{width:34px; height:34px; border-radius:10px; border:1px solid var(--line); background:var(--card-soft); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; color:var(--text-dim);}
+
+  .chips{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 4px;}
+  .chip{font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:20px; background:var(--card-soft); color:var(--text-dim); border:1px solid var(--line); cursor:default;}
+  .chip.hot{background:rgba(255,138,61,0.12); color:var(--amber); border-color:rgba(255,138,61,0.28);}
+  .chip.pickable{cursor:pointer; user-select:none; transition:.15s;}
+  .chip.pickable.selected{background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; border-color:transparent;}
+  .chip.prompt{cursor:pointer; background:var(--card-soft); color:var(--dusk-1); border-color:var(--line);}
+
+  .focus-card{
+    background:linear-gradient(135deg, var(--dusk-1) 0%, var(--dawn-1) 100%);
+    border-radius:var(--radius); padding:16px 18px; margin-bottom:14px; color:#fff;
+    box-shadow:0 12px 28px -10px rgba(27,63,191,0.45);
+  }
+  .focus-label{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; opacity:.75; margin-bottom:5px;}
+  .focus-text{font-size:14.5px; font-weight:600; line-height:1.4;}
+
+  .mbar-row{display:flex; align-items:center; gap:10px; padding:6px 0;}
+  .mbar-label{width:76px; font-size:12px; font-weight:600; color:var(--text-dim); flex-shrink:0;}
+  .mbar-track{flex:1; height:8px; background:var(--card-soft); border-radius:6px; overflow:hidden;}
+  .mbar-fill{height:100%; background:linear-gradient(90deg, var(--dawn-1), var(--dusk-1)); border-radius:6px; transition:width .4s ease;}
+  .mbar-count{width:18px; font-size:11.5px; color:var(--text-faint); text-align:right; flex-shrink:0;}
+
+  .setup-card{background:linear-gradient(160deg, var(--card) 0%, var(--card-soft) 100%); border:1px solid var(--line); border-radius:var(--radius); padding:20px 18px; box-shadow:var(--shadow); text-align:left;}
+  .setup-title{font-size:16px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:10px;}
+  .setup-sub{font-size:12.5px; color:var(--text-dim); line-height:1.5; margin-bottom:16px;}
+  .field-label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); margin:12px 0 6px;}
+  .field-input, select.field-input{width:100%; background:var(--card-soft); border:1px solid var(--line); border-radius:11px; padding:11px 12px; color:var(--text); font-family:'Inter'; font-size:13.5px;}
+  .field-input:focus{outline:none; border-color:var(--violet);}
+  .seg-provider{display:flex; gap:8px; margin-top:4px;}
+  .seg-provider button{flex:1; padding:10px; border-radius:11px; border:1px solid var(--line); background:var(--card-soft); color:var(--text-dim); font-weight:700; font-size:13px; cursor:pointer;}
+  .seg-provider button.active{background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; border-color:transparent;}
+  .primary-btn{width:100%; border:none; border-radius:12px; padding:12px; margin-top:16px; font-weight:700; font-size:13.5px; background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; cursor:pointer;}
+  .ghost-btn{width:100%; border:1px solid var(--line); border-radius:12px; padding:11px; margin-top:8px; font-weight:600; font-size:13px; background:transparent; color:var(--text-dim); cursor:pointer;}
+  .hint{font-size:11px; color:var(--text-faint); margin-top:10px; line-height:1.5;}
+
+  .chat-scroll{max-height:52vh; overflow-y:auto; padding:4px 2px 8px; margin-bottom:10px;}
+  .bubble{max-width:86%; padding:10px 13px; border-radius:16px; font-size:13.5px; line-height:1.45; margin-bottom:8px; white-space:pre-wrap;}
+  .bubble.user{background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; margin-left:auto; border-bottom-right-radius:5px;}
+  .bubble.coach{background:var(--card-soft); color:var(--text); margin-right:auto; border-bottom-left-radius:5px; border:1px solid var(--line);}
+  .bubble.system{background:transparent; color:var(--text-faint); font-size:11.5px; text-align:center; margin:2px auto; max-width:100%; font-style:italic;}
+  .chat-input-row{display:flex; gap:8px; align-items:flex-end;}
+  .chat-input-row textarea{flex:1; resize:none; background:var(--card-soft); border:1px solid var(--line); border-radius:14px; padding:11px 13px; color:var(--text); font-family:'Inter'; font-size:13.5px; max-height:100px;}
+  .chat-input-row textarea:focus{outline:none; border-color:var(--violet);}
+  .send-btn{width:44px; height:44px; border-radius:14px; border:none; background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); color:#fff; font-size:17px; cursor:pointer; flex-shrink:0;}
+  .send-btn:disabled{opacity:.4;}
+  .typing-dots span{display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--text-faint); margin-right:3px; animation:blink 1.2s infinite;}
+  .typing-dots span:nth-child(2){animation-delay:.2s;} .typing-dots span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.2;} 40%{opacity:1;}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="eyebrow" id="dayName">—</div>
+    <div class="date-row">
+      <h1 id="dateStr">—</h1>
+      <div class="streak">🔥 <span id="streakNum">0</span> day streak</div>
+    </div>
+
+    <div class="arc-card">
+      <svg class="arc-svg" viewBox="0 0 400 130" id="arcSvg">
+        <path d="M 20 120 A 180 180 0 0 1 380 120" fill="none" stroke="#383b6e" stroke-width="3" stroke-linecap="round"/>
+        <path id="arcProgress" d="M 20 120 A 180 180 0 0 1 380 120" fill="none" stroke="url(#arcGrad)" stroke-width="3" stroke-linecap="round" stroke-dasharray="565" stroke-dashoffset="565"/>
+        <defs>
+          <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#2F6FED"/><stop offset="50%" stop-color="#8FD3FF"/><stop offset="100%" stop-color="#1B3FBF"/>
+          </linearGradient>
+        </defs>
+        <circle id="sunMoon" cx="20" cy="120" r="9" fill="#8FD3FF"/>
+        <text x="20" y="30" fill="#99A6C2" font-size="11" font-family="Inter" text-anchor="middle">AM</text>
+        <text x="380" y="30" fill="#99A6C2" font-size="11" font-family="Inter" text-anchor="middle">PM</text>
+      </svg>
+      <div class="arc-caption"><span id="timeNow">--:--</span><span id="dayProgressLabel">0% through today</span></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-view="today">Today</div>
+    <div class="tab" data-view="coach">Coach</div>
+    <div class="tab" data-view="plan">Plan</div>
+    <div class="tab" data-view="stack">Stack</div>
+    <div class="tab" data-view="history">History</div>
+  </div>
+
+  <!-- TODAY -->
+  <div class="view active" id="view-today">
+    <div class="focus-card" id="focusCard">
+      <div class="focus-label">Today's focus</div>
+      <div class="focus-text" id="focusText">—</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot am"></span>Training</div></div>
+      <div class="seg" id="workoutSeg"><button data-w="am">Morning</button><button data-w="pm">Evening</button><button data-w="rest">Rest day</button></div>
+      <div class="section-sub" style="margin-bottom:8px;">Log muscle groups trained</div>
+      <div class="chips" id="muscleQuickLog"></div>
+      <div class="add-row" style="margin-top:2px;">
+        <input type="text" id="workoutNote" placeholder="Optional note — sets, weight, how it felt">
+        <button id="logWorkoutBtn">Log</button>
+      </div>
+      <div class="section-sub" style="margin:14px 0 6px;">Last 7 days by muscle group</div>
+      <div id="muscleBars"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot am"></span>Morning routine</div><div class="section-sub">4 steps</div></div>
+      <div id="amList"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot pm"></span>Night routine</div><div class="section-sub" id="pmActiveLabel">—</div></div>
+      <div id="pmList"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot sup"></span>Supplements</div><div class="section-sub" id="supDoneCount">0/0</div></div>
+      <div id="supList"></div>
+    </div>
+  </div>
+
+  <!-- COACH -->
+  <div class="view" id="view-coach">
+    <div id="coachSetupWrap"></div>
+    <div id="coachChatWrap" style="display:none;">
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title"><span class="coach-mark"></span>&nbsp;Coach</div>
+          <div class="gear" id="gearBtn">⚙</div>
+        </div>
+        <div class="section-sub" style="margin-bottom:6px;">Trained this week</div>
+        <div class="chips" id="weekChips"></div>
+      </div>
+      <div class="section">
+        <div class="chat-scroll" id="chatScroll"></div>
+        <div class="chips" id="promptChips" style="margin-bottom:10px;"></div>
+        <div class="ghost-btn" id="weeklyReviewBtn" style="margin-top:0;">Ask for a week review</div>
+        <div class="chat-input-row" style="margin-top:10px;">
+          <textarea id="chatInput" rows="1" placeholder="e.g. trained back and biceps, felt strong"></textarea>
+          <button class="send-btn" id="sendBtn">↑</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAN -->
+  <div class="view" id="view-plan">
+    <div class="section">
+      <div class="section-head"><div class="section-title">Night rotation</div></div>
+      <div class="week-grid" id="weekGrid"></div>
+      <div class="plan-line">Rotation exists so retinol, glycolic/kojic, and niacinamide never land on the same night — that's what actually causes irritation, not the products themselves.</div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Why this order</div></div>
+      <div class="plan-line"><b>AM:</b> cleanse → vit C (2–3 drops) → moisturizer → sunscreen. Sunscreen last, small amount, pat in.</div>
+      <div class="plan-line"><b>PM:</b> cleanse → the night's active → moisturizer.</div>
+      <div class="plan-line"><b>Supplements:</b> creatine daily regardless of training. Whey follows whichever side of the day training lands on. D3/K2 and fish oil ride with meals that have some fat.</div>
+    </div>
+  </div>
+
+  <!-- STACK -->
+  <div class="view" id="view-stack">
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot am"></span>AM steps</div></div>
+      <div id="stackAm"></div>
+      <div class="add-row"><input type="text" id="newAm" placeholder="Add a morning step…"><button onclick="addStackItem('am')">Add</button></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot pm"></span>Night actives (rotation pool)</div></div>
+      <div id="stackPm"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title"><span class="dot sup"></span>Supplements</div></div>
+      <div id="stackSup"></div>
+      <div class="add-row"><input type="text" id="newSup" placeholder="Add a supplement…"><button onclick="addStackItem('sup')">Add</button></div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="view" id="view-history">
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-num" id="statStreak">0</div><div class="stat-label">Streak</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat7">0%</div><div class="stat-label">Last 7 days</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat30">0%</div><div class="stat-label">Last 30 days</div></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Recent days</div></div>
+      <div id="histList"></div>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= Storage adapter (localStorage-backed, works standalone / GitHub Pages) ================= */
+const STORAGE_PREFIX = 'arcTracker:';
+const appStorage = {
+  async get(key){
+    try{
+      const raw = localStorage.getItem(STORAGE_PREFIX + key);
+      if(raw === null) return null;
+      return { key, value: raw };
+    }catch(e){ return null; }
+  },
+  async set(key, value){
+    try{ localStorage.setItem(STORAGE_PREFIX + key, value); return { key, value }; }
+    catch(e){ return null; } // e.g. private-browsing mode with storage disabled, or quota exceeded
+  },
+  async delete(key){
+    try{ localStorage.removeItem(STORAGE_PREFIX + key); return { key, deleted:true }; }
+    catch(e){ return null; }
+  },
+  async list(prefix){
+    try{
+      const keys = [];
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        if(k && k.startsWith(STORAGE_PREFIX)){
+          const stripped = k.slice(STORAGE_PREFIX.length);
+          if(!prefix || stripped.startsWith(prefix)) keys.push(stripped);
+        }
+      }
+      return { keys };
+    }catch(e){ return null; }
+  }
+};
+
+/* ================= Config & defaults ================= */
+const DEFAULT_CONFIG = {
+  am: [
+    {id:'cleanse', name:'Belavita brightening soap', note:"Cleanse. Don't over-scrub — brightening soaps already carry active acids."},
+    {id:'vitc', name:'Garnier 30x Vit C serum', note:'2–3 drops only. Wait 60 sec before next step.'},
+    {id:'moist', name:"Pond's Hydra Miracle Gel", note:'Thin layer, lets it absorb.'},
+    {id:'sunscreen', name:'Khadi Natural sunscreen SPF50', note:'Pea-size amount, pat in. Reapply if outdoors 3+ hrs.'},
+  ],
+  pmPool: {
+    retinol: {name:'Elibliss Retinol serum', note:'Start small — a few drops, avoid eye area.'},
+    glycolic: {name:'Get Nectar Glycolic 6% + Kojic 2%', note:'Exfoliant. Skip if skin feels irritated from the day before.'},
+    niacinamide: {name:'MyGlamm 10% Niacinamide', note:'Safe filler night — pairs fine with everything.'},
+  },
+  pmMoisturizer: {name:"Pond's Hydra Miracle Gel", note:'Same gel, locks in the night active.'},
+  pmCleanse: {name:'Belavita brightening soap', note:'Cleanse first, always.'},
+  rotation: {0:'niacinamide',1:'retinol',2:'glycolic',3:'niacinamide',4:'retinol',5:'glycolic',6:'niacinamide'},
+  supplements: [
+    {id:'creatine', name:'Creatine monohydrate 3–5g', note:'Daily, any time, with water.', tag:null},
+    {id:'whey', name:'Whey protein', note:"Post-workout — timing follows today's training slot.", tag:null},
+    {id:'d3k2', name:'Vitamin D3 + K2 (Menavon)', note:'With breakfast, needs some fat to absorb.', tag:null},
+    {id:'fishoil', name:'Fish oil (EPA/DHA)', note:'With lunch or dinner.', tag:null},
+    {id:'ashwa', name:'Ashwagandha', note:'With dinner — also helps sleep.', tag:null},
+    {id:'seeds', name:'Chia / sunflower / pumpkin seeds', note:'Stir into breakfast.', tag:null},
+    {id:'evion', name:'Evion 400 (Vit E)', note:'Max 2x/week — not a daily supplement.', tag:'optional'},
+    {id:'gluta', name:'Oral glutathione stack', note:'Weak evidence for skin brightening. Kept only if you want to keep tracking it.', tag:'skip'},
+  ]
+};
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const ACTIVE_LABEL = {retinol:'Retinol night', glycolic:'Glycolic + Kojic night', niacinamide:'Niacinamide night'};
+const ACTIVE_CLASS = {retinol:'active-retinol', glycolic:'active-glycolic', niacinamide:'active-niacinamide'};
+
+let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+let todayLog = {am:{}, pm:{}, sup:{}, workout:null};
+let secrets = {provider:'gemini', apiKey:'', model:''};
+let chatMessages = [];
+const MUSCLE_GROUPS = ['Chest','Back','Legs','Shoulders','Arms','Core'];
+const QUICK_PROMPTS = ["How's my week?", "Am I balanced across muscle groups?", "What should I focus on tonight?", "Rate my adherence honestly"];
+let selectedMuscles = new Set();
+
+const pad = n => String(n).padStart(2,'0');
+const dateKey = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const todayKey = () => dateKey(new Date());
+
+/* ================= Storage ================= */
+async function loadConfig(){
+  try{ const res = await appStorage.get('config'); if(res && res.value) config = Object.assign({}, DEFAULT_CONFIG, JSON.parse(res.value)); }
+  catch(e){}
+}
+async function saveConfig(){ try{ await appStorage.set('config', JSON.stringify(config)); }catch(e){ showToast('Could not save changes'); } }
+async function loadToday(){
+  try{ const res = await appStorage.get('log:'+todayKey()); if(res && res.value) todayLog = JSON.parse(res.value); }
+  catch(e){ todayLog = {am:{}, pm:{}, sup:{}, workout:null}; }
+}
+async function saveToday(){ try{ await appStorage.set('log:'+todayKey(), JSON.stringify(todayLog)); }catch(e){ showToast('Save failed'); } }
+async function loadSecrets(){
+  try{ const res = await appStorage.get('secrets'); if(res && res.value) secrets = Object.assign(secrets, JSON.parse(res.value)); }
+  catch(e){}
+}
+async function saveSecrets(){ try{ await appStorage.set('secrets', JSON.stringify(secrets)); }catch(e){ showToast('Could not save settings'); } }
+async function loadChat(){
+  try{ const res = await appStorage.get('coach:messages'); if(res && res.value) chatMessages = JSON.parse(res.value); }
+  catch(e){ chatMessages = []; }
+}
+async function saveChat(){
+  try{ await appStorage.set('coach:messages', JSON.stringify(chatMessages.slice(-60))); }catch(e){}
+}
+async function getWorkout(dk){
+  try{ const res = await appStorage.get('workout:'+dk); if(res && res.value) return JSON.parse(res.value); return []; }
+  catch(e){ return []; }
+}
+async function addWorkoutEntry(dk, entry){
+  const list = await getWorkout(dk);
+  list.push(entry);
+  try{ await appStorage.set('workout:'+dk, JSON.stringify(list)); }catch(e){ showToast('Could not save workout'); }
+}
+async function getMuscleTally(days){
+  const tally = {};
+  let d = new Date();
+  for(let i=0;i<days;i++){
+    const list = await getWorkout(dateKey(d));
+    list.forEach(e=>(e.muscle_groups||[]).forEach(g=>{ tally[g] = (tally[g]||0)+1; }));
+    d.setDate(d.getDate()-1);
+  }
+  return tally;
+}
+
+/* ================= Toast ================= */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* ================= Header / arc ================= */
+function renderHeader(){
+  const now = new Date();
+  document.getElementById('dayName').textContent = now.toLocaleDateString('en-US',{weekday:'long'});
+  document.getElementById('dateStr').textContent = now.toLocaleDateString('en-US',{month:'long', day:'numeric'});
+  document.getElementById('timeNow').textContent = now.toLocaleTimeString('en-US',{hour:'2-digit', minute:'2-digit'});
+  const hour = now.getHours() + now.getMinutes()/60;
+  let pct = (hour - 6) / (23 - 6);
+  pct = Math.max(0, Math.min(1, pct));
+  document.getElementById('dayProgressLabel').textContent = Math.round(pct*100) + '% through today';
+  const path = document.getElementById('arcProgress');
+  const len = path.getTotalLength();
+  path.setAttribute('stroke-dasharray', len);
+  path.setAttribute('stroke-dashoffset', len * (1-pct));
+  const point = path.getPointAtLength(len*pct);
+  const sunMoon = document.getElementById('sunMoon');
+  sunMoon.setAttribute('cx', point.x); sunMoon.setAttribute('cy', point.y);
+  sunMoon.setAttribute('fill', pct < 0.55 ? '#8FD3FF' : '#6F63D8');
+}
+
+/* ================= Today view ================= */
+function renderAM(){
+  const wrap = document.getElementById('amList'); wrap.innerHTML = '';
+  config.am.forEach(step=>{
+    wrap.appendChild(buildItem(step.id, step.name, step.note, !!todayLog.am[step.id], (c)=>{ todayLog.am[step.id]=c; saveToday(); computeStreakAndRender(); }));
+  });
+}
+function renderPM(){
+  const dow = new Date().getDay();
+  const activeKey = config.rotation[dow];
+  document.getElementById('pmActiveLabel').textContent = ACTIVE_LABEL[activeKey] || '';
+  const wrap = document.getElementById('pmList'); wrap.innerHTML = '';
+  wrap.appendChild(buildItem('cleanse', config.pmCleanse.name, config.pmCleanse.note, !!todayLog.pm.cleanse, (c)=>{ todayLog.pm.cleanse=c; saveToday(); computeStreakAndRender(); }));
+  const activeInfo = config.pmPool[activeKey];
+  if(activeInfo){
+    wrap.appendChild(buildItem('active', activeInfo.name, activeInfo.note, !!todayLog.pm.active, (c)=>{ todayLog.pm.active=c; saveToday(); computeStreakAndRender(); }, ACTIVE_LABEL[activeKey]));
+  }
+  wrap.appendChild(buildItem('moist', config.pmMoisturizer.name, config.pmMoisturizer.note, !!todayLog.pm.moist, (c)=>{ todayLog.pm.moist=c; saveToday(); computeStreakAndRender(); }));
+}
+function renderSupplements(){
+  const wrap = document.getElementById('supList'); wrap.innerHTML = '';
+  config.supplements.forEach(s=>{
+    wrap.appendChild(buildItem(s.id, s.name, s.note, !!todayLog.sup[s.id], (c)=>{ todayLog.sup[s.id]=c; saveToday(); updateSupCount(); computeStreakAndRender(); }, null, s.tag));
+  });
+  updateSupCount();
+}
+function updateSupCount(){
+  const total = config.supplements.length;
+  const done = config.supplements.filter(s=>todayLog.sup[s.id]).length;
+  document.getElementById('supDoneCount').textContent = done+'/'+total;
+}
+function buildItem(id, name, note, checked, onToggle, tagText, tagType){
+  const row = document.createElement('div'); row.className = 'item';
+  const box = document.createElement('div'); box.className = 'check' + (checked ? ' checked' : '');
+  box.onclick = ()=>{ const nowChecked = !box.classList.contains('checked'); box.classList.toggle('checked'); nameEl.classList.toggle('done', nowChecked); onToggle(nowChecked); };
+  const body = document.createElement('div'); body.className = 'item-body';
+  const nameRow = document.createElement('div'); nameRow.style.display='flex'; nameRow.style.justifyContent='space-between'; nameRow.style.alignItems='flex-start';
+  const nameEl = document.createElement('div'); nameEl.className = 'item-name' + (checked ? ' done' : ''); nameEl.textContent = name;
+  nameRow.appendChild(nameEl);
+  if(tagText){ const tag=document.createElement('span'); tag.className='item-tag'; tag.textContent=tagText; tag.style.background='rgba(168,155,240,0.15)'; tag.style.color='var(--violet)'; nameRow.appendChild(tag); }
+  if(tagType==='optional'){ const tag=document.createElement('span'); tag.className='item-tag tag-optional'; tag.textContent='optional'; nameRow.appendChild(tag); }
+  if(tagType==='skip'){ const tag=document.createElement('span'); tag.className='item-tag tag-skip'; tag.textContent='low priority'; nameRow.appendChild(tag); }
+  const noteEl = document.createElement('div'); noteEl.className='item-note'; noteEl.textContent = note||'';
+  body.appendChild(nameRow); if(note) body.appendChild(noteEl);
+  row.appendChild(box); row.appendChild(body);
+  return row;
+}
+function renderWorkoutSeg(){
+  const seg = document.getElementById('workoutSeg');
+  [...seg.children].forEach(btn=>{
+    btn.classList.toggle('active', todayLog.workout === btn.dataset.w);
+    btn.onclick = ()=>{ todayLog.workout = btn.dataset.w; renderWorkoutSeg(); saveToday(); showToast(btn.dataset.w==='rest' ? 'Rest day logged' : 'Training logged for '+(btn.dataset.w==='am'?'morning':'evening')); };
+  });
+}
+
+/* ================= Plan ================= */
+function renderMuscleQuickLog(){
+  const wrap = document.getElementById('muscleQuickLog');
+  wrap.innerHTML = '';
+  MUSCLE_GROUPS.forEach(g=>{
+    const chip = document.createElement('span');
+    chip.className = 'chip pickable' + (selectedMuscles.has(g) ? ' selected' : '');
+    chip.textContent = g;
+    chip.onclick = ()=>{ selectedMuscles.has(g) ? selectedMuscles.delete(g) : selectedMuscles.add(g); renderMuscleQuickLog(); };
+    wrap.appendChild(chip);
+  });
+}
+async function renderMuscleBars(){
+  const wrap = document.getElementById('muscleBars');
+  const tally = await getMuscleTally(7);
+  const max = Math.max(1, ...MUSCLE_GROUPS.map(g=>tally[g]||0));
+  wrap.innerHTML = '';
+  MUSCLE_GROUPS.forEach(g=>{
+    const count = tally[g] || 0;
+    const row = document.createElement('div'); row.className = 'mbar-row';
+    row.innerHTML = `<div class="mbar-label">${g}</div><div class="mbar-track"><div class="mbar-fill" style="width:${(count/max*100)}%"></div></div><div class="mbar-count">${count}</div>`;
+    wrap.appendChild(row);
+  });
+}
+async function renderFocusCard(){
+  const el = document.getElementById('focusText');
+  if(!el) return;
+  const tally = await getMuscleTally(7);
+  const totalWorkouts = Object.values(tally).reduce((a,b)=>a+b,0);
+  const hour = new Date().getHours();
+  const messages = [];
+  if(totalWorkouts>=2){
+    const neglected = MUSCLE_GROUPS.filter(g=>!tally[g]);
+    if(neglected.length) messages.push(`Not trained this week: ${neglected.join(', ')}.`);
+  }
+  if(!todayLog.am['sunscreen'] && hour>=9){
+    messages.push('Sunscreen not on yet — this is the step doing most of the detan work.');
+  } else {
+    const amDone = config.am.every(s=>todayLog.am[s.id]);
+    if(!amDone && hour>=10) messages.push('Morning skincare still incomplete.');
+  }
+  const supDone = config.supplements.filter(s=>todayLog.sup[s.id]).length;
+  if(hour>=19 && supDone < config.supplements.length){
+    messages.push(`${config.supplements.length-supDone} supplement(s) not logged yet today.`);
+  }
+  if(!todayLog.workout && hour>=13){
+    messages.push("Training slot not set for today.");
+  }
+  if(messages.length===0){
+    messages.push(totalWorkouts>=2 ? "On track — nothing urgent right now." : "Log a couple of workouts this week to unlock muscle-balance insights.");
+  }
+  el.textContent = messages.slice(0,2).join(' ');
+}
+
+function renderPlan(){
+  const grid = document.getElementById('weekGrid'); grid.innerHTML = '';
+  const todayDow = new Date().getDay();
+  for(let i=0;i<7;i++){
+    const key = config.rotation[i];
+    const cell = document.createElement('div'); cell.className='day-cell' + (i===todayDow ? ' today-ring':'');
+    cell.innerHTML = `<div class="d">${DAY_NAMES[i]}</div><div class="a ${ACTIVE_CLASS[key]||''}">${(config.pmPool[key]?config.pmPool[key].name.split(' ')[0]:key)}</div>`;
+    grid.appendChild(cell);
+  }
+}
+
+/* ================= Stack ================= */
+function renderStack(){
+  const amWrap = document.getElementById('stackAm'); amWrap.innerHTML = '';
+  config.am.forEach((step, idx)=>{ amWrap.appendChild(buildStackRow(step.name, ()=>{ config.am.splice(idx,1); saveConfig(); renderAll(); })); });
+  const pmWrap = document.getElementById('stackPm'); pmWrap.innerHTML = '';
+  Object.keys(config.pmPool).forEach(key=>{ pmWrap.appendChild(buildStackRow(config.pmPool[key].name+' — '+ACTIVE_LABEL[key], null, true)); });
+  const supWrap = document.getElementById('stackSup'); supWrap.innerHTML = '';
+  config.supplements.forEach((s, idx)=>{ supWrap.appendChild(buildStackRow(s.name, ()=>{ config.supplements.splice(idx,1); saveConfig(); renderAll(); })); });
+}
+function buildStackRow(label, onDelete, locked){
+  const row = document.createElement('div'); row.className='stack-row';
+  const text = document.createElement('div'); text.className='label'; text.textContent = label;
+  row.appendChild(text);
+  if(!locked){ const del=document.createElement('div'); del.className='icon-btn danger'; del.textContent='×'; del.onclick = onDelete; row.appendChild(del); }
+  return row;
+}
+function addStackItem(type){
+  if(type==='am'){ const input=document.getElementById('newAm'); if(!input.value.trim())return; config.am.push({id:'custom'+Date.now(), name:input.value.trim(), note:''}); input.value=''; }
+  else if(type==='sup'){ const input=document.getElementById('newSup'); if(!input.value.trim())return; config.supplements.push({id:'custom'+Date.now(), name:input.value.trim(), note:'', tag:null}); input.value=''; }
+  saveConfig(); renderAll();
+}
+
+/* ================= History ================= */
+function scorePercent(log){
+  if(!log) return 0;
+  const amKeys = config.am.map(s=>s.id);
+  const supKeys = config.supplements.map(s=>s.id);
+  const pmKeys = ['cleanse','active','moist'];
+  const all = [...amKeys.map(k=>log.am && log.am[k]), ...pmKeys.map(k=>log.pm && log.pm[k]), ...supKeys.map(k=>log.sup && log.sup[k])];
+  if(all.length===0) return 0;
+  return Math.round((all.filter(Boolean).length/all.length)*100);
+}
+async function computeStreakAndRender(){
+  let d = new Date();
+  const results = [];
+  for(let i=0;i<45;i++){
+    const key = dateKey(d);
+    let log = null;
+    if(i===0){ log = todayLog; }
+    else{ try{ const res = await appStorage.get('log:'+key); if(res && res.value) log = JSON.parse(res.value); }catch(e){ log=null; } }
+    results.push({date:d.toLocaleDateString('en-US',{month:'short', day:'numeric'}), pct:scorePercent(log), isToday:i===0});
+    d.setDate(d.getDate()-1);
+  }
+  let strictStreak = 0;
+  for(let i=0;i<results.length;i++){
+    if(i===0 && results[0].pct < 60) continue;
+    if(results[i].pct >= 60) strictStreak++; else break;
+  }
+  document.getElementById('streakNum').textContent = strictStreak;
+  document.getElementById('statStreak').textContent = strictStreak;
+  const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b.pct,0)/arr.length) : 0;
+  document.getElementById('stat7').textContent = avg(results.slice(0,7))+'%';
+  document.getElementById('stat30').textContent = avg(results.slice(0,30))+'%';
+  const histWrap = document.getElementById('histList'); histWrap.innerHTML = '';
+  if(results.every(r=>r.pct===0)){ histWrap.innerHTML = '<div class="empty">No history yet — check off items to start your streak.</div>'; }
+  else{
+    results.slice(0,14).forEach(r=>{
+      const row = document.createElement('div'); row.className='hist-row';
+      row.innerHTML = `<div class="hist-date">${r.date}${r.isToday?' · today':''}</div><div style="display:flex;align-items:center;gap:8px;"><div class="hist-bar"><div class="hist-bar-fill" style="width:${r.pct}%"></div></div><div class="hist-pct">${r.pct}%</div></div>`;
+      histWrap.appendChild(row);
+    });
+  }
+  return results;
+}
+
+/* ================= Coach ================= */
+const MODEL_DEFAULTS = { gemini:'gemini-2.5-flash', groq:'llama-3.3-70b-versatile' };
+
+function renderCoachSetup(){
+  const wrap = document.getElementById('coachSetupWrap');
+  const hasKey = !!secrets.apiKey;
+  document.getElementById('coachChatWrap').style.display = hasKey ? 'block' : 'none';
+  if(hasKey){ wrap.innerHTML=''; renderChat(); renderWeekChips(); renderPromptChips(); return; }
+  wrap.innerHTML = `
+    <div class="setup-card">
+      <div class="setup-title"><span class="coach-mark"></span>&nbsp;Connect your coach</div>
+      <div class="setup-sub">Paste a free API key from Gemini or Groq. It's stored only on this device and sent directly from your browser to that provider — there's no server in between, so don't put this file anywhere public.</div>
+      <div class="field-label">Provider</div>
+      <div class="seg-provider" id="providerSeg">
+        <button data-p="gemini" class="${secrets.provider==='gemini'?'active':''}">Gemini</button>
+        <button data-p="groq" class="${secrets.provider==='groq'?'active':''}">Groq</button>
+      </div>
+      <div class="field-label">API key</div>
+      <input class="field-input" type="password" id="apiKeyInput" placeholder="Paste key here" value="${secrets.apiKey||''}">
+      <div class="field-label">Model</div>
+      <input class="field-input" id="modelInput" placeholder="${MODEL_DEFAULTS[secrets.provider]}" value="${secrets.model||''}">
+      <button class="primary-btn" id="saveSecretsBtn">Connect</button>
+      <div class="hint">Gemini: aistudio.google.com → Get API key. Groq: console.groq.com → API Keys. Both free, no card needed as of writing — availability can change on their end.</div>
+    </div>
+  `;
+  document.querySelectorAll('#providerSeg button').forEach(btn=>{
+    btn.onclick = ()=>{ secrets.provider = btn.dataset.p; renderCoachSetup(); };
+  });
+  document.getElementById('saveSecretsBtn').onclick = async ()=>{
+    secrets.apiKey = document.getElementById('apiKeyInput').value.trim();
+    secrets.model = document.getElementById('modelInput').value.trim() || MODEL_DEFAULTS[secrets.provider];
+    if(!secrets.apiKey){ showToast('Paste a key first'); return; }
+    await saveSecrets();
+    showToast('Connected');
+    renderCoachSetup();
+  };
+}
+
+function renderPromptChips(){
+  const wrap = document.getElementById('promptChips');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  QUICK_PROMPTS.forEach(p=>{
+    const chip = document.createElement('span'); chip.className = 'chip prompt'; chip.textContent = p;
+    chip.onclick = ()=>{ document.getElementById('chatInput').value = p; sendChat(); };
+    wrap.appendChild(chip);
+  });
+}
+function renderChat(){
+  const scroll = document.getElementById('chatScroll');
+  scroll.innerHTML = '';
+  if(chatMessages.length===0){
+    const sys = document.createElement('div'); sys.className='bubble system';
+    sys.textContent = 'Tell me what you trained, or ask anything about your plan.';
+    scroll.appendChild(sys);
+  }
+  chatMessages.forEach(m=>{
+    const b = document.createElement('div'); b.className = 'bubble ' + (m.role==='user'?'user':'coach');
+    b.textContent = m.content;
+    scroll.appendChild(b);
+  });
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+async function renderWeekChips(){
+  const wrap = document.getElementById('weekChips');
+  wrap.innerHTML = '';
+  const tally = {};
+  let d = new Date();
+  let anyEntries = false;
+  for(let i=0;i<7;i++){
+    const list = await getWorkout(dateKey(d));
+    list.forEach(e=>{ anyEntries = true; (e.muscle_groups||[]).forEach(g=>{ tally[g] = (tally[g]||0)+1; }); });
+    d.setDate(d.getDate()-1);
+  }
+  if(!anyEntries){
+    wrap.innerHTML = '<span class="chip">Nothing logged yet this week</span>';
+    return;
+  }
+  Object.keys(tally).sort((a,b)=>tally[b]-tally[a]).forEach(g=>{
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (tally[g]>=2 ? ' hot' : '');
+    chip.textContent = g + (tally[g]>1 ? ' ×'+tally[g] : '');
+    wrap.appendChild(chip);
+  });
+}
+
+async function buildLiveContext(){
+  const amStatus = config.am.map(s=>`${s.name}: ${todayLog.am[s.id] ? 'done' : 'not done'}`).join('; ');
+  const dow = new Date().getDay();
+  const tonightActive = ACTIVE_LABEL[config.rotation[dow]];
+  const pmStatus = `cleanse ${todayLog.pm.cleanse?'done':'not done'}, ${tonightActive} ${todayLog.pm.active?'done':'not done'}, moisturizer ${todayLog.pm.moist?'done':'not done'}`;
+  const supStatus = config.supplements.map(s=>`${s.name}: ${todayLog.sup[s.id]?'done':'not done'}`).join('; ');
+  const workoutSlot = todayLog.workout || 'not set yet';
+  const tally = await getMuscleTally(7);
+  const tallyText = Object.keys(tally).length ? Object.entries(tally).map(([g,c])=>`${g} x${c}`).join(', ') : 'no workouts logged this week';
+  const neglected = MUSCLE_GROUPS.filter(g=>!tally[g]);
+  return `Today is ${new Date().toLocaleDateString('en-US',{weekday:'long'})}. AM routine status — ${amStatus}. PM routine status — ${pmStatus}. Supplement status — ${supStatus}. Training slot chosen today: ${workoutSlot}. Muscle groups trained in the last 7 days: ${tallyText}. Groups with zero sessions this week: ${neglected.length ? neglected.join(', ') : 'none'}.`;
+}
+
+function buildSystemPrompt(weekSummaryText){
+  const amNames = config.am.map(s=>s.name).join(', ');
+  const dow = new Date().getDay();
+  const tonight = ACTIVE_LABEL[config.rotation[dow]];
+  const supNames = config.supplements.map(s=>s.name).join(', ');
+  return `You are a blunt, no-nonsense personal trainer and skin-coach for one specific user. Goals: build muscle, and brighten/detan skin safely.
+Their fixed skincare stack (AM): ${amNames}. Tonight's skincare active: ${tonight}. Supplements they track: ${supNames}.
+Live status right now: ${weekSummaryText}
+When the user describes a workout (e.g. "trained back today"), extract it using only these muscle group labels when possible: Chest, Back, Legs, Shoulders, Arms, Core. Always respond with ONLY valid JSON, no markdown fences, matching exactly this shape:
+{"reply": "short direct coach reply, 2-4 sentences, no fluff, no compliments without a concrete reason, reference the live status above when relevant (e.g. call out an unchecked step or a neglected muscle group)", "workout": {"muscle_groups": ["Back","Arms"], "intensity": "light|moderate|hard", "notes": "short note"} or null if no workout was mentioned, "flags": ["short flag strings for anything concerning, e.g. same muscle group 3 days straight, sunscreen skipped, or empty array"]}
+Be honest and direct like a real coach, not encouraging by default — point out imbalances and skipped items using the live status data, don't just answer generically.`;
+}
+
+async function callLLM(userText, extraContext){
+  const sys = buildSystemPrompt(extraContext || '');
+  if(secrets.provider === 'gemini'){
+    const model = secrets.model || MODEL_DEFAULTS.gemini;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(secrets.apiKey)}`;
+    const res = await fetch(url, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        systemInstruction:{parts:[{text:sys}]},
+        contents:[{role:'user', parts:[{text:userText}]}],
+        generationConfig:{ temperature:0.4 }
+      })
+    });
+    if(!res.ok){ throw new Error('Gemini request failed ('+res.status+'). Check your API key and model name.'); }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map(p=>p.text).join('') || '';
+    return text;
+  } else {
+    const model = secrets.model || MODEL_DEFAULTS.groq;
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'Authorization':'Bearer '+secrets.apiKey},
+      body: JSON.stringify({
+        model, temperature:0.4,
+        messages:[{role:'system', content:sys}, {role:'user', content:userText}]
+      })
+    });
+    if(!res.ok){ throw new Error('Groq request failed ('+res.status+'). This may be a CORS block on direct browser calls, or an invalid key/model.'); }
+    const data = await res.json();
+    return data?.choices?.[0]?.message?.content || '';
+  }
+}
+
+function parseCoachJSON(raw){
+  let cleaned = raw.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+  try{ return JSON.parse(cleaned); }
+  catch(e){ return {reply: raw || "Couldn't parse a structured reply, but here's the raw response.", workout:null, flags:[]}; }
+}
+
+async function sendChat(){
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  chatMessages.push({role:'user', content:text});
+  renderChat(); saveChat();
+
+  const scroll = document.getElementById('chatScroll');
+  const typing = document.createElement('div'); typing.className='bubble coach'; typing.innerHTML='<span class="typing-dots"><span></span><span></span><span></span></span>';
+  scroll.appendChild(typing); scroll.scrollTop = scroll.scrollHeight;
+
+  document.getElementById('sendBtn').disabled = true;
+  try{
+    const liveContext = await buildLiveContext();
+    const raw = await callLLM(text, liveContext);
+    const parsed = parseCoachJSON(raw);
+    typing.remove();
+    chatMessages.push({role:'assistant', content: parsed.reply || '(empty reply)'});
+    renderChat(); saveChat();
+    if(parsed.workout){
+      await addWorkoutEntry(todayKey(), {muscle_groups: parsed.workout.muscle_groups||[], intensity: parsed.workout.intensity||'', notes: parsed.workout.notes||text, ts: Date.now(), source:'coach'});
+      renderWeekChips(); renderMuscleBars(); renderFocusCard();
+    }
+    if(parsed.flags && parsed.flags.length){
+      showToast(parsed.flags[0]);
+    }
+  }catch(e){
+    typing.remove();
+    chatMessages.push({role:'assistant', content: 'Could not reach the coach: ' + e.message});
+    renderChat(); saveChat();
+  }
+  document.getElementById('sendBtn').disabled = false;
+}
+
+async function weeklyReview(){
+  document.getElementById('weeklyReviewBtn').textContent = 'Thinking…';
+  const results = await computeStreakAndRender();
+  const last7 = results.slice(0,7);
+  const avgPct = Math.round(last7.reduce((a,b)=>a+b.pct,0)/last7.length);
+  const tally = await getMuscleTally(7);
+  const workoutSummary = Object.keys(tally).length ? Object.entries(tally).map(([g,c])=>g+' x'+c).join(', ') : 'no workouts logged';
+  const liveContext = await buildLiveContext();
+  const context = `This week's skincare+supplement adherence average: ${avgPct}%. Workouts logged this week: ${workoutSummary}. ${liveContext}`;
+  chatMessages.push({role:'user', content:'Give me my week review.'});
+  renderChat(); saveChat();
+  const scroll = document.getElementById('chatScroll');
+  const typing = document.createElement('div'); typing.className='bubble coach'; typing.innerHTML='<span class="typing-dots"><span></span><span></span><span></span></span>';
+  scroll.appendChild(typing); scroll.scrollTop = scroll.scrollHeight;
+  try{
+    const raw = await callLLM('Analyze my week and be direct about what to fix.', context);
+    const parsed = parseCoachJSON(raw);
+    typing.remove();
+    chatMessages.push({role:'assistant', content: parsed.reply || raw});
+    renderChat(); saveChat();
+  }catch(e){
+    typing.remove();
+    chatMessages.push({role:'assistant', content:'Could not reach the coach: '+e.message});
+    renderChat(); saveChat();
+  }
+  document.getElementById('weeklyReviewBtn').textContent = 'Ask for a week review';
+}
+
+/* ================= Tabs ================= */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-'+tab.dataset.view).classList.add('active');
+    if(tab.dataset.view==='plan') renderPlan();
+    if(tab.dataset.view==='stack') renderStack();
+    if(tab.dataset.view==='history') computeStreakAndRender();
+    if(tab.dataset.view==='coach') renderCoachSetup();
+  };
+});
+
+/* ================= Init ================= */
+function renderAll(){ renderHeader(); renderAM(); renderPM(); renderSupplements(); renderWorkoutSeg(); renderPlan(); renderMuscleQuickLog(); renderMuscleBars(); renderFocusCard(); }
+async function init(){
+  await loadConfig(); await loadToday(); await loadSecrets(); await loadChat();
+  renderAll();
+  computeStreakAndRender();
+  document.getElementById('sendBtn').onclick = sendChat;
+  document.getElementById('chatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+  document.getElementById('weeklyReviewBtn').onclick = weeklyReview;
+  document.getElementById('gearBtn').onclick = ()=>{ secrets.apiKey=''; saveSecrets(); renderCoachSetup(); showToast('Disconnected — add a key to reconnect'); };
+  document.getElementById('logWorkoutBtn').onclick = async ()=>{
+    if(selectedMuscles.size===0){ showToast('Pick at least one muscle group'); return; }
+    const note = document.getElementById('workoutNote').value.trim();
+    await addWorkoutEntry(todayKey(), {muscle_groups:[...selectedMuscles], intensity:'', notes:note, ts:Date.now(), source:'manual'});
+    selectedMuscles.clear();
+    document.getElementById('workoutNote').value = '';
+    renderMuscleQuickLog(); renderMuscleBars(); renderFocusCard();
+    showToast('Workout logged');
+  };
+  setInterval(renderHeader, 60000);
+}
+init();
+</script>
+</body>
+</html>
