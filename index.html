@@ -152,6 +152,16 @@
   .focus-label{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; opacity:.75; margin-bottom:5px;}
   .focus-text{font-size:14.5px; font-weight:600; line-height:1.4;}
 
+  .date-scroll{display:flex; gap:8px; overflow-x:auto; padding:2px 2px 12px; -webkit-overflow-scrolling:touch;}
+  .date-chip{flex-shrink:0; min-width:50px; text-align:center; padding:8px 4px 7px; border-radius:14px; background:var(--card); border:1px solid var(--line); cursor:pointer; box-shadow:var(--shadow); transition:.15s;}
+  .date-chip .dow{font-size:9.5px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em;}
+  .date-chip .num{font-size:15px; font-weight:700; color:var(--text); margin-top:2px;}
+  .date-chip.active{background:linear-gradient(135deg, var(--dawn-1), var(--dusk-1)); border-color:transparent;}
+  .date-chip.active .dow, .date-chip.active .num{color:#fff;}
+  .date-chip .dot-has-data{width:4px; height:4px; border-radius:50%; background:var(--mint); margin:4px auto 0;}
+  .date-chip.active .dot-has-data{background:#fff;}
+  .editing-banner{background:rgba(255,138,61,0.13); border:1px solid rgba(255,138,61,0.32); color:#B85E17; font-size:12px; font-weight:600; padding:9px 12px; border-radius:12px; margin-bottom:12px; text-align:center;}
+
   .mbar-row{display:flex; align-items:center; gap:10px; padding:6px 0;}
   .mbar-label{width:76px; font-size:12px; font-weight:600; color:var(--text-dim); flex-shrink:0;}
   .mbar-track{flex:1; height:8px; background:var(--card-soft); border-radius:6px; overflow:hidden;}
@@ -223,6 +233,9 @@
 
   <!-- TODAY -->
   <div class="view active" id="view-today">
+    <div class="date-scroll" id="dateStrip"></div>
+    <div class="editing-banner" id="editingBanner" style="display:none;"></div>
+
     <div class="focus-card" id="focusCard">
       <div class="focus-label">Today's focus</div>
       <div class="focus-text" id="focusText">—</div>
@@ -393,7 +406,9 @@ const ACTIVE_LABEL = {retinol:'Retinol night', glycolic:'Glycolic + Kojic night'
 const ACTIVE_CLASS = {retinol:'active-retinol', glycolic:'active-glycolic', niacinamide:'active-niacinamide'};
 
 let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-let todayLog = {am:{}, pm:{}, sup:{}, workout:null};
+let activeLog = {am:{}, pm:{}, sup:{}, workout:null};
+let activeDateStr = todayKey();
+let logsCache = {};
 let secrets = {provider:'gemini', apiKey:'', model:''};
 let chatMessages = [];
 const MUSCLE_GROUPS = ['Chest','Back','Legs','Shoulders','Arms','Core'];
@@ -410,11 +425,24 @@ async function loadConfig(){
   catch(e){}
 }
 async function saveConfig(){ try{ await appStorage.set('config', JSON.stringify(config)); }catch(e){ showToast('Could not save changes'); } }
-async function loadToday(){
-  try{ const res = await appStorage.get('log:'+todayKey()); if(res && res.value) todayLog = JSON.parse(res.value); }
-  catch(e){ todayLog = {am:{}, pm:{}, sup:{}, workout:null}; }
+async function getLog(ds){
+  if(logsCache[ds]) return logsCache[ds];
+  try{
+    const res = await appStorage.get('log:'+ds);
+    logsCache[ds] = (res && res.value) ? JSON.parse(res.value) : {am:{}, pm:{}, sup:{}, workout:null};
+  }catch(e){ logsCache[ds] = {am:{}, pm:{}, sup:{}, workout:null}; }
+  return logsCache[ds];
 }
-async function saveToday(){ try{ await appStorage.set('log:'+todayKey(), JSON.stringify(todayLog)); }catch(e){ showToast('Save failed'); } }
+async function saveActiveLog(){
+  logsCache[activeDateStr] = activeLog;
+  try{ await appStorage.set('log:'+activeDateStr, JSON.stringify(activeLog)); }catch(e){ showToast('Save failed'); }
+}
+function buildDateList(rangeDays){
+  const list = [];
+  let d = new Date();
+  for(let i=0;i<rangeDays;i++){ list.push(new Date(d)); d.setDate(d.getDate()-1); }
+  return list; // [today, yesterday, ... N days back]
+}
 async function loadSecrets(){
   try{ const res = await appStorage.get('secrets'); if(res && res.value) secrets = Object.assign(secrets, JSON.parse(res.value)); }
   catch(e){}
@@ -474,35 +502,35 @@ function renderHeader(){
   sunMoon.setAttribute('fill', pct < 0.55 ? '#8FD3FF' : '#6F63D8');
 }
 
-/* ================= Today view ================= */
+/* ================= Today view (date-aware: operates on activeLog / activeDateStr) ================= */
 function renderAM(){
   const wrap = document.getElementById('amList'); wrap.innerHTML = '';
   config.am.forEach(step=>{
-    wrap.appendChild(buildItem(step.id, step.name, step.note, !!todayLog.am[step.id], (c)=>{ todayLog.am[step.id]=c; saveToday(); computeStreakAndRender(); }));
+    wrap.appendChild(buildItem(step.id, step.name, step.note, !!activeLog.am[step.id], (c)=>{ activeLog.am[step.id]=c; saveActiveLog(); computeStreakAndRender(); }));
   });
 }
 function renderPM(){
-  const dow = new Date().getDay();
+  const dow = new Date(activeDateStr+'T00:00:00').getDay();
   const activeKey = config.rotation[dow];
   document.getElementById('pmActiveLabel').textContent = ACTIVE_LABEL[activeKey] || '';
   const wrap = document.getElementById('pmList'); wrap.innerHTML = '';
-  wrap.appendChild(buildItem('cleanse', config.pmCleanse.name, config.pmCleanse.note, !!todayLog.pm.cleanse, (c)=>{ todayLog.pm.cleanse=c; saveToday(); computeStreakAndRender(); }));
+  wrap.appendChild(buildItem('cleanse', config.pmCleanse.name, config.pmCleanse.note, !!activeLog.pm.cleanse, (c)=>{ activeLog.pm.cleanse=c; saveActiveLog(); computeStreakAndRender(); }));
   const activeInfo = config.pmPool[activeKey];
   if(activeInfo){
-    wrap.appendChild(buildItem('active', activeInfo.name, activeInfo.note, !!todayLog.pm.active, (c)=>{ todayLog.pm.active=c; saveToday(); computeStreakAndRender(); }, ACTIVE_LABEL[activeKey]));
+    wrap.appendChild(buildItem('active', activeInfo.name, activeInfo.note, !!activeLog.pm.active, (c)=>{ activeLog.pm.active=c; saveActiveLog(); computeStreakAndRender(); }, ACTIVE_LABEL[activeKey]));
   }
-  wrap.appendChild(buildItem('moist', config.pmMoisturizer.name, config.pmMoisturizer.note, !!todayLog.pm.moist, (c)=>{ todayLog.pm.moist=c; saveToday(); computeStreakAndRender(); }));
+  wrap.appendChild(buildItem('moist', config.pmMoisturizer.name, config.pmMoisturizer.note, !!activeLog.pm.moist, (c)=>{ activeLog.pm.moist=c; saveActiveLog(); computeStreakAndRender(); }));
 }
 function renderSupplements(){
   const wrap = document.getElementById('supList'); wrap.innerHTML = '';
   config.supplements.forEach(s=>{
-    wrap.appendChild(buildItem(s.id, s.name, s.note, !!todayLog.sup[s.id], (c)=>{ todayLog.sup[s.id]=c; saveToday(); updateSupCount(); computeStreakAndRender(); }, null, s.tag));
+    wrap.appendChild(buildItem(s.id, s.name, s.note, !!activeLog.sup[s.id], (c)=>{ activeLog.sup[s.id]=c; saveActiveLog(); updateSupCount(); computeStreakAndRender(); }, null, s.tag));
   });
   updateSupCount();
 }
 function updateSupCount(){
   const total = config.supplements.length;
-  const done = config.supplements.filter(s=>todayLog.sup[s.id]).length;
+  const done = config.supplements.filter(s=>activeLog.sup[s.id]).length;
   document.getElementById('supDoneCount').textContent = done+'/'+total;
 }
 function buildItem(id, name, note, checked, onToggle, tagText, tagType){
@@ -523,9 +551,10 @@ function buildItem(id, name, note, checked, onToggle, tagText, tagType){
 }
 function renderWorkoutSeg(){
   const seg = document.getElementById('workoutSeg');
+  const dayWord = activeDateStr===todayKey() ? '' : ' (' + new Date(activeDateStr+'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'}) + ')';
   [...seg.children].forEach(btn=>{
-    btn.classList.toggle('active', todayLog.workout === btn.dataset.w);
-    btn.onclick = ()=>{ todayLog.workout = btn.dataset.w; renderWorkoutSeg(); saveToday(); showToast(btn.dataset.w==='rest' ? 'Rest day logged' : 'Training logged for '+(btn.dataset.w==='am'?'morning':'evening')); };
+    btn.classList.toggle('active', activeLog.workout === btn.dataset.w);
+    btn.onclick = ()=>{ activeLog.workout = btn.dataset.w; renderWorkoutSeg(); saveActiveLog(); showToast((btn.dataset.w==='rest' ? 'Rest day logged' : 'Training logged for '+(btn.dataset.w==='am'?'morning':'evening')) + dayWord); };
   });
 }
 
@@ -556,6 +585,7 @@ async function renderMuscleBars(){
 async function renderFocusCard(){
   const el = document.getElementById('focusText');
   if(!el) return;
+  const realTodayLog = await getLog(todayKey());
   const tally = await getMuscleTally(7);
   const totalWorkouts = Object.values(tally).reduce((a,b)=>a+b,0);
   const hour = new Date().getHours();
@@ -564,23 +594,54 @@ async function renderFocusCard(){
     const neglected = MUSCLE_GROUPS.filter(g=>!tally[g]);
     if(neglected.length) messages.push(`Not trained this week: ${neglected.join(', ')}.`);
   }
-  if(!todayLog.am['sunscreen'] && hour>=9){
+  if(!realTodayLog.am['sunscreen'] && hour>=9){
     messages.push('Sunscreen not on yet — this is the step doing most of the detan work.');
   } else {
-    const amDone = config.am.every(s=>todayLog.am[s.id]);
+    const amDone = config.am.every(s=>realTodayLog.am[s.id]);
     if(!amDone && hour>=10) messages.push('Morning skincare still incomplete.');
   }
-  const supDone = config.supplements.filter(s=>todayLog.sup[s.id]).length;
+  const supDone = config.supplements.filter(s=>realTodayLog.sup[s.id]).length;
   if(hour>=19 && supDone < config.supplements.length){
     messages.push(`${config.supplements.length-supDone} supplement(s) not logged yet today.`);
   }
-  if(!todayLog.workout && hour>=13){
+  if(!realTodayLog.workout && hour>=13){
     messages.push("Training slot not set for today.");
   }
   if(messages.length===0){
     messages.push(totalWorkouts>=2 ? "On track — nothing urgent right now." : "Log a couple of workouts this week to unlock muscle-balance insights.");
   }
   el.textContent = messages.slice(0,2).join(' ');
+}
+
+async function renderDateStrip(){
+  const wrap = document.getElementById('dateStrip');
+  wrap.innerHTML = '';
+  const dates = buildDateList(7); // today first, then up to 6 days back
+  for(const d of dates){
+    const ds = dateKey(d);
+    const log = await getLog(ds);
+    const hasData = Object.values(log.am||{}).some(Boolean) || Object.values(log.pm||{}).some(Boolean) || Object.values(log.sup||{}).some(Boolean) || !!log.workout;
+    const chip = document.createElement('div');
+    chip.className = 'date-chip' + (ds===activeDateStr ? ' active' : '');
+    const isToday = ds===todayKey();
+    const dow = d.toLocaleDateString('en-US',{weekday:'short'});
+    chip.innerHTML = `<div class="dow">${isToday?'Today':dow}</div><div class="num">${d.getDate()}</div>${hasData ? '<div class="dot-has-data"></div>' : ''}`;
+    chip.onclick = async ()=>{
+      activeDateStr = ds;
+      activeLog = await getLog(ds);
+      renderDateStrip();
+      renderAM(); renderPM(); renderSupplements(); renderWorkoutSeg(); renderMuscleQuickLog();
+      updateEditingBanner();
+    };
+    wrap.appendChild(chip);
+  }
+}
+function updateEditingBanner(){
+  const b = document.getElementById('editingBanner');
+  if(activeDateStr === todayKey()){ b.style.display = 'none'; return; }
+  const d = new Date(activeDateStr+'T00:00:00');
+  b.style.display = 'block';
+  b.textContent = `Backfilling ${d.toLocaleDateString('en-US',{weekday:'long', month:'short', day:'numeric'})} — checklists and workout log below apply to that day, not today.`;
 }
 
 function renderPlan(){
@@ -631,9 +692,7 @@ async function computeStreakAndRender(){
   const results = [];
   for(let i=0;i<45;i++){
     const key = dateKey(d);
-    let log = null;
-    if(i===0){ log = todayLog; }
-    else{ try{ const res = await appStorage.get('log:'+key); if(res && res.value) log = JSON.parse(res.value); }catch(e){ log=null; } }
+    const log = await getLog(key);
     results.push({date:d.toLocaleDateString('en-US',{month:'short', day:'numeric'}), pct:scorePercent(log), isToday:i===0});
     d.setDate(d.getDate()-1);
   }
@@ -747,12 +806,13 @@ async function renderWeekChips(){
 }
 
 async function buildLiveContext(){
-  const amStatus = config.am.map(s=>`${s.name}: ${todayLog.am[s.id] ? 'done' : 'not done'}`).join('; ');
+  const realTodayLog = await getLog(todayKey());
+  const amStatus = config.am.map(s=>`${s.name}: ${realTodayLog.am[s.id] ? 'done' : 'not done'}`).join('; ');
   const dow = new Date().getDay();
   const tonightActive = ACTIVE_LABEL[config.rotation[dow]];
-  const pmStatus = `cleanse ${todayLog.pm.cleanse?'done':'not done'}, ${tonightActive} ${todayLog.pm.active?'done':'not done'}, moisturizer ${todayLog.pm.moist?'done':'not done'}`;
-  const supStatus = config.supplements.map(s=>`${s.name}: ${todayLog.sup[s.id]?'done':'not done'}`).join('; ');
-  const workoutSlot = todayLog.workout || 'not set yet';
+  const pmStatus = `cleanse ${realTodayLog.pm.cleanse?'done':'not done'}, ${tonightActive} ${realTodayLog.pm.active?'done':'not done'}, moisturizer ${realTodayLog.pm.moist?'done':'not done'}`;
+  const supStatus = config.supplements.map(s=>`${s.name}: ${realTodayLog.sup[s.id]?'done':'not done'}`).join('; ');
+  const workoutSlot = realTodayLog.workout || 'not set yet';
   const tally = await getMuscleTally(7);
   const tallyText = Object.keys(tally).length ? Object.entries(tally).map(([g,c])=>`${g} x${c}`).join(', ') : 'no workouts logged this week';
   const neglected = MUSCLE_GROUPS.filter(g=>!tally[g]);
@@ -889,9 +949,9 @@ document.querySelectorAll('.tab').forEach(tab=>{
 });
 
 /* ================= Init ================= */
-function renderAll(){ renderHeader(); renderAM(); renderPM(); renderSupplements(); renderWorkoutSeg(); renderPlan(); renderMuscleQuickLog(); renderMuscleBars(); renderFocusCard(); }
+function renderAll(){ renderHeader(); renderAM(); renderPM(); renderSupplements(); renderWorkoutSeg(); renderPlan(); renderMuscleQuickLog(); renderMuscleBars(); renderFocusCard(); renderDateStrip(); updateEditingBanner(); }
 async function init(){
-  await loadConfig(); await loadToday(); await loadSecrets(); await loadChat();
+  await loadConfig(); activeLog = await getLog(activeDateStr); await loadSecrets(); await loadChat();
   renderAll();
   computeStreakAndRender();
   document.getElementById('sendBtn').onclick = sendChat;
@@ -901,11 +961,12 @@ async function init(){
   document.getElementById('logWorkoutBtn').onclick = async ()=>{
     if(selectedMuscles.size===0){ showToast('Pick at least one muscle group'); return; }
     const note = document.getElementById('workoutNote').value.trim();
-    await addWorkoutEntry(todayKey(), {muscle_groups:[...selectedMuscles], intensity:'', notes:note, ts:Date.now(), source:'manual'});
+    await addWorkoutEntry(activeDateStr, {muscle_groups:[...selectedMuscles], intensity:'', notes:note, ts:Date.now(), source:'manual'});
     selectedMuscles.clear();
     document.getElementById('workoutNote').value = '';
     renderMuscleQuickLog(); renderMuscleBars(); renderFocusCard();
-    showToast('Workout logged');
+    const dayWord = activeDateStr===todayKey() ? '' : ' for ' + new Date(activeDateStr+'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'});
+    showToast('Workout logged' + dayWord);
   };
   setInterval(renderHeader, 60000);
 }
