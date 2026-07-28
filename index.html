@@ -274,10 +274,20 @@
       <div class="section">
         <div class="section-head">
           <div class="section-title"><span class="coach-mark"></span>&nbsp;Coach</div>
-          <div class="gear" id="gearBtn">⚙</div>
+          <div style="display:flex; gap:8px;">
+            <div class="gear" id="memoryBtn" title="What the coach remembers">🧠</div>
+            <div class="gear" id="gearBtn">⚙</div>
+          </div>
         </div>
         <div class="section-sub" style="margin-bottom:6px;">Trained this week</div>
         <div class="chips" id="weekChips"></div>
+      </div>
+      <div class="section" id="memoryPanel" style="display:none;">
+        <div class="section-head"><div class="section-title">What the coach remembers</div></div>
+        <div class="section-sub" id="memoryDigestText" style="margin-bottom:10px; line-height:1.5;"></div>
+        <div id="memoryList"></div>
+        <div class="add-row" style="margin-top:10px;"><input type="text" id="newMemoryNote" placeholder="Tell it something to remember…"><button id="addMemoryBtn">Add</button></div>
+        <div class="hint">Notes get folded into a compact summary automatically once there are enough of them, so this doesn't grow forever. Delete anything wrong or outdated.</div>
       </div>
       <div class="section">
         <div class="chat-scroll" id="chatScroll"></div>
@@ -391,14 +401,14 @@ const DEFAULT_CONFIG = {
   pmCleanse: {name:'Belavita brightening soap', note:'Cleanse first, always.'},
   rotation: {0:'niacinamide',1:'retinol',2:'glycolic',3:'niacinamide',4:'retinol',5:'glycolic',6:'niacinamide'},
   supplements: [
-    {id:'creatine', name:'Creatine monohydrate 3–5g', note:'Daily, any time, with water.', tag:null},
-    {id:'whey', name:'Whey protein', note:"Post-workout — timing follows today's training slot.", tag:null},
-    {id:'d3k2', name:'Vitamin D3 + K2 (Menavon)', note:'With breakfast, needs some fat to absorb.', tag:null},
-    {id:'fishoil', name:'Fish oil (EPA/DHA)', note:'With lunch or dinner.', tag:null},
-    {id:'ashwa', name:'Ashwagandha', note:'With dinner — also helps sleep.', tag:null},
-    {id:'seeds', name:'Chia / sunflower / pumpkin seeds', note:'Stir into breakfast.', tag:null},
-    {id:'evion', name:'Evion 400 (Vit E)', note:'Max 2x/week — not a daily supplement.', tag:'optional'},
-    {id:'gluta', name:'Oral glutathione stack', note:'Weak evidence for skin brightening. Kept only if you want to keep tracking it.', tag:'skip'},
+    {id:'creatine', name:'Creatine monohydrate', dose:'3–5g', note:'Daily, any time, with water. Saturation-based — a missed day needs no makeup dose.', tag:null},
+    {id:'whey', name:'Whey protein', dose:'~24g protein/scoop', note:"Post-workout — timing follows today's training slot.", tag:null},
+    {id:'d3k2', name:'Vitamin D3 + K2 (Menavon)', dose:'D3 600 IU + K2 55mcg', note:'With breakfast, needs some fat to absorb. Fat-soluble — body stores it, no makeup needed if missed.', tag:null},
+    {id:'fishoil', name:'Fish oil', dose:'1000mg (EPA 180mg / DHA 120mg)', note:'With lunch or dinner. Never double up a missed dose.', tag:null},
+    {id:'ashwa', name:'Ashwagandha', dose:'~250mg extract/tablet', note:'With dinner — also helps sleep. Adaptogen, works on consistency over weeks, not single doses — a missed day is a non-event.', tag:null},
+    {id:'seeds', name:'Chia / sunflower / pumpkin seeds', dose:'1 tbsp each', note:'Stir into breakfast.', tag:null},
+    {id:'evion', name:'Evion 400 (Vit E)', dose:'400mg', note:'Max 2x/week — not a daily supplement.', tag:'optional'},
+    {id:'gluta', name:'Oral glutathione stack', dose:'Gluta 500mg / Vit C 60mg / Grape seed 300mg / ALA 50mg / Lysine 50mg / Vit E 10mg / Biotin 40mcg', note:'Weak evidence for skin brightening. Kept only if you want to keep tracking it.', tag:'skip'},
   ]
 };
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -418,6 +428,7 @@ let chatMessages = [];
 const MUSCLE_GROUPS = ['Chest','Back','Legs','Shoulders','Arms','Core'];
 const QUICK_PROMPTS = ["How's my week?", "Am I balanced across muscle groups?", "What should I focus on tonight?", "Rate my adherence honestly"];
 let selectedMuscles = new Set();
+let memoryPanelOpen = false;
 
 /* ================= Storage ================= */
 async function loadConfig(){
@@ -475,6 +486,62 @@ async function getMuscleTally(days){
   return tally;
 }
 
+/* ================= Memory layer =================
+   A compact, append-only log of durable facts/patterns the coach has noticed about the user,
+   plus a running compacted "digest" so it doesn't grow unbounded. This is the personalization
+   layer — every coach call reads from this, not just today's checklist. */
+const MEMORY_COMPACT_THRESHOLD = 20; // once raw notes exceed this, oldest ones get summarized away
+const MEMORY_COMPACT_BATCH = 12;     // how many oldest notes get folded into the digest per pass
+
+async function getMemory(){
+  try{ const res = await appStorage.get('memory'); return (res && res.value) ? JSON.parse(res.value) : []; }
+  catch(e){ return []; }
+}
+async function saveMemory(list){ try{ await appStorage.set('memory', JSON.stringify(list)); }catch(e){} }
+async function getMemoryDigest(){
+  try{ const res = await appStorage.get('memoryDigest'); return (res && res.value) ? res.value : ''; }
+  catch(e){ return ''; }
+}
+async function saveMemoryDigest(text){ try{ await appStorage.set('memoryDigest', text); }catch(e){} }
+
+async function addMemoryNote(text, kind){
+  if(!text || !text.trim()) return;
+  const list = await getMemory();
+  list.push({ id: 'm'+Date.now()+Math.floor(Math.random()*1000), date: todayKey(), text: text.trim(), kind: kind || 'observation' });
+  await saveMemory(list);
+  maybeCompactMemory(); // fire and forget — don't block the chat response on this
+}
+async function deleteMemoryNote(id){
+  const list = await getMemory();
+  await saveMemory(list.filter(m=>m.id!==id));
+}
+async function maybeCompactMemory(){
+  const list = await getMemory();
+  if(list.length <= MEMORY_COMPACT_THRESHOLD) return;
+  if(!secrets.apiKey) return; // compaction needs the LLM; without a key, just let raw notes sit (still usable, just not distilled)
+  const toCompact = list.slice(0, MEMORY_COMPACT_BATCH);
+  const remaining = list.slice(MEMORY_COMPACT_BATCH);
+  const existingDigest = await getMemoryDigest();
+  const prompt = `Existing profile summary of this user (may be empty): "${existingDigest || '(none yet)'}"
+New raw observations to fold in, oldest first:
+${toCompact.map(m=>`- [${m.date}] ${m.text}`).join('\n')}
+Rewrite this into ONE updated profile summary paragraph, under 120 words, capturing durable patterns/preferences/health notes that matter for coaching this person on muscle-building and skin brightening. Drop anything trivial or one-off. Respond with ONLY the paragraph, no preamble, no quotes.`;
+  try{
+    const raw = await callLLM(prompt, '', 'You are a concise summarizer. Respond with only the requested paragraph of plain text, no JSON, no markdown, no preamble.');
+    const cleaned = raw.trim().replace(/^"|"$/g,'');
+    await saveMemoryDigest(cleaned);
+    await saveMemory(remaining);
+  }catch(e){ /* compaction failing silently is fine — raw notes just keep accumulating until it succeeds later */ }
+}
+async function buildMemoryContext(){
+  const digest = await getMemoryDigest();
+  const list = await getMemory();
+  const recent = list.slice(-8).map(m=>`[${m.date}] ${m.text}`).join('; ');
+  if(!digest && !recent) return 'No long-term memory recorded yet.';
+  return `Long-term profile: ${digest || '(building — not enough history yet)'}${recent ? ' Recent specific notes: '+recent : ''}`;
+}
+
+
 /* ================= Toast ================= */
 let toastTimer;
 function showToast(msg){
@@ -526,7 +593,8 @@ function renderPM(){
 function renderSupplements(){
   const wrap = document.getElementById('supList'); wrap.innerHTML = '';
   config.supplements.forEach(s=>{
-    wrap.appendChild(buildItem(s.id, s.name, s.note, !!activeLog.sup[s.id], (c)=>{ activeLog.sup[s.id]=c; saveActiveLog(); updateSupCount(); computeStreakAndRender(); }, null, s.tag));
+    const noteWithDose = s.dose ? `${s.dose} — ${s.note}` : s.note;
+    wrap.appendChild(buildItem(s.id, s.name, noteWithDose, !!activeLog.sup[s.id], (c)=>{ activeLog.sup[s.id]=c; saveActiveLog(); updateSupCount(); computeStreakAndRender(); }, null, s.tag));
   });
   updateSupCount();
 }
@@ -664,7 +732,7 @@ function renderStack(){
   const pmWrap = document.getElementById('stackPm'); pmWrap.innerHTML = '';
   Object.keys(config.pmPool).forEach(key=>{ pmWrap.appendChild(buildStackRow(config.pmPool[key].name+' — '+ACTIVE_LABEL[key], null, true)); });
   const supWrap = document.getElementById('stackSup'); supWrap.innerHTML = '';
-  config.supplements.forEach((s, idx)=>{ supWrap.appendChild(buildStackRow(s.name, ()=>{ config.supplements.splice(idx,1); saveConfig(); renderAll(); })); });
+  config.supplements.forEach((s, idx)=>{ supWrap.appendChild(buildStackRow(s.name + (s.dose ? ' — '+s.dose : ''), ()=>{ config.supplements.splice(idx,1); saveConfig(); renderAll(); })); });
 }
 function buildStackRow(label, onDelete, locked){
   const row = document.createElement('div'); row.className='stack-row';
@@ -727,7 +795,7 @@ function renderCoachSetup(){
   const wrap = document.getElementById('coachSetupWrap');
   const hasKey = !!secrets.apiKey;
   document.getElementById('coachChatWrap').style.display = hasKey ? 'block' : 'none';
-  if(hasKey){ wrap.innerHTML=''; renderChat(); renderWeekChips(); renderPromptChips(); return; }
+  if(hasKey){ wrap.innerHTML=''; renderChat(); renderWeekChips(); renderPromptChips(); renderMemoryPanel(); return; }
   wrap.innerHTML = `
     <div class="setup-card">
       <div class="setup-title"><span class="coach-mark"></span>&nbsp;Connect your coach</div>
@@ -768,6 +836,31 @@ function renderPromptChips(){
     wrap.appendChild(chip);
   });
 }
+async function renderMemoryPanel(){
+  const panel = document.getElementById('memoryPanel');
+  if(!panel) return;
+  panel.style.display = memoryPanelOpen ? 'block' : 'none';
+  if(!memoryPanelOpen) return;
+  const digest = await getMemoryDigest();
+  document.getElementById('memoryDigestText').textContent = digest || 'No long-term summary yet — this builds up once there are enough notes to compress.';
+  const list = await getMemory();
+  const listWrap = document.getElementById('memoryList');
+  listWrap.innerHTML = '';
+  if(list.length===0){
+    listWrap.innerHTML = '<div class="empty">No individual notes right now.</div>';
+  } else {
+    list.slice().reverse().forEach(m=>{
+      const row = document.createElement('div'); row.className = 'stack-row';
+      const text = document.createElement('div'); text.className = 'label'; text.style.fontWeight='500';
+      text.innerHTML = `<span style="color:var(--text-faint); font-size:11px;">${m.date}</span><br>${m.text}`;
+      const del = document.createElement('div'); del.className = 'icon-btn danger'; del.textContent = '×';
+      del.onclick = async ()=>{ await deleteMemoryNote(m.id); renderMemoryPanel(); };
+      row.appendChild(text); row.appendChild(del);
+      listWrap.appendChild(row);
+    });
+  }
+}
+function renderMemoryPanelIfOpen(){ if(memoryPanelOpen) renderMemoryPanel(); }
 function renderChat(){
   const scroll = document.getElementById('chatScroll');
   scroll.innerHTML = '';
@@ -825,17 +918,27 @@ function buildSystemPrompt(weekSummaryText){
   const amNames = config.am.map(s=>s.name).join(', ');
   const dow = new Date().getDay();
   const tonight = ACTIVE_LABEL[config.rotation[dow]];
-  const supNames = config.supplements.map(s=>s.name).join(', ');
-  return `You are a blunt, no-nonsense personal trainer and skin-coach for one specific user. Goals: build muscle, and brighten/detan skin safely.
-Their fixed skincare stack (AM): ${amNames}. Tonight's skincare active: ${tonight}. Supplements they track: ${supNames}.
-Live status right now: ${weekSummaryText}
-When the user describes a workout (e.g. "trained back today"), extract it using only these muscle group labels when possible: Chest, Back, Legs, Shoulders, Arms, Core. Always respond with ONLY valid JSON, no markdown fences, matching exactly this shape:
-{"reply": "short direct coach reply, 2-4 sentences, no fluff, no compliments without a concrete reason, reference the live status above when relevant (e.g. call out an unchecked step or a neglected muscle group)", "workout": {"muscle_groups": ["Back","Arms"], "intensity": "light|moderate|hard", "notes": "short note"} or null if no workout was mentioned, "flags": ["short flag strings for anything concerning, e.g. same muscle group 3 days straight, sunscreen skipped, or empty array"]}
-Be honest and direct like a real coach, not encouraging by default — point out imbalances and skipped items using the live status data, don't just answer generically.`;
+  const doseList = config.supplements.map(s=>`${s.name}${s.dose ? ' ('+s.dose+')' : ''}`).join(', ');
+  return `You are a blunt, no-nonsense personal trainer and skin-coach for one specific user, with persistent memory of them across sessions. Goals: build muscle, and brighten/detan skin safely.
+Their fixed skincare stack (AM): ${amNames}. Tonight's skincare active: ${tonight}.
+Their exact supplement stack with doses: ${doseList}.
+Live status right now and long-term memory of this user: ${weekSummaryText}
+
+HARD RULES, never violate these:
+- Never suggest doubling up or "catching up" a missed supplement dose the next day, for any supplement in the stack. These are maintenance supplements, not acute medications — missing a day just means resuming normal dosing.
+- Never suggest changing the skincare night rotation to compensate for a missed night. The fixed weekly rotation exists specifically to prevent irritation from overlapping actives; skipping a night just means skipping it, not doubling the next one.
+- If asked for exact dosage of any item in the stack, answer with the precise number from the stack list above, not an approximation.
+
+When the user describes a workout (e.g. "trained back today"), extract it using only these muscle group labels when possible: Chest, Back, Legs, Shoulders, Arms, Core.
+When the user reveals something durable and worth remembering across future sessions — a preference, a recurring pattern, a health note, an injury, something that changes how you should coach them going forward — write it as a short memory_note. Do NOT write a memory_note for routine daily logging (a normal workout or a normal "done" checklist item is not memory-worthy). Only write one when something genuinely new and durable comes up.
+
+Always respond with ONLY valid JSON, no markdown fences, matching exactly this shape:
+{"reply": "short direct coach reply, 2-4 sentences, no fluff, no compliments without a concrete reason, reference the live status and memory above when relevant", "workout": {"muscle_groups": ["Back","Arms"], "intensity": "light|moderate|hard", "notes": "short note"} or null if no workout was mentioned, "flags": ["short flag strings for anything concerning, or empty array"], "memory_note": "a short durable fact/pattern worth remembering long-term, or null if nothing memory-worthy came up"}
+Be honest and direct like a real coach, not encouraging by default — point out imbalances and skipped items using the live status and memory data, don't just answer generically.`;
 }
 
-async function callLLM(userText, extraContext){
-  const sys = buildSystemPrompt(extraContext || '');
+async function callLLM(userText, extraContext, rawSystemOverride){
+  const sys = rawSystemOverride || buildSystemPrompt(extraContext || '');
   if(secrets.provider === 'gemini'){
     const model = secrets.model || MODEL_DEFAULTS.gemini;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(secrets.apiKey)}`;
@@ -888,7 +991,8 @@ async function sendChat(){
   document.getElementById('sendBtn').disabled = true;
   try{
     const liveContext = await buildLiveContext();
-    const raw = await callLLM(text, liveContext);
+    const memoryContext = await buildMemoryContext();
+    const raw = await callLLM(text, liveContext + ' ' + memoryContext);
     const parsed = parseCoachJSON(raw);
     typing.remove();
     chatMessages.push({role:'assistant', content: parsed.reply || '(empty reply)'});
@@ -896,6 +1000,10 @@ async function sendChat(){
     if(parsed.workout){
       await addWorkoutEntry(todayKey(), {muscle_groups: parsed.workout.muscle_groups||[], intensity: parsed.workout.intensity||'', notes: parsed.workout.notes||text, ts: Date.now(), source:'coach'});
       renderWeekChips(); renderMuscleBars(); renderFocusCard();
+    }
+    if(parsed.memory_note){
+      await addMemoryNote(parsed.memory_note, 'coach');
+      renderMemoryPanelIfOpen();
     }
     if(parsed.flags && parsed.flags.length){
       showToast(parsed.flags[0]);
@@ -916,18 +1024,23 @@ async function weeklyReview(){
   const tally = await getMuscleTally(7);
   const workoutSummary = Object.keys(tally).length ? Object.entries(tally).map(([g,c])=>g+' x'+c).join(', ') : 'no workouts logged';
   const liveContext = await buildLiveContext();
-  const context = `This week's skincare+supplement adherence average: ${avgPct}%. Workouts logged this week: ${workoutSummary}. ${liveContext}`;
+  const memoryContext = await buildMemoryContext();
+  const context = `This week's skincare+supplement adherence average: ${avgPct}%. Workouts logged this week: ${workoutSummary}. ${liveContext} ${memoryContext}`;
   chatMessages.push({role:'user', content:'Give me my week review.'});
   renderChat(); saveChat();
   const scroll = document.getElementById('chatScroll');
   const typing = document.createElement('div'); typing.className='bubble coach'; typing.innerHTML='<span class="typing-dots"><span></span><span></span><span></span></span>';
   scroll.appendChild(typing); scroll.scrollTop = scroll.scrollHeight;
   try{
-    const raw = await callLLM('Analyze my week and be direct about what to fix.', context);
+    const raw = await callLLM('Analyze my week and be direct about what to fix. If you notice a durable pattern worth remembering long-term, include it as memory_note.', context);
     const parsed = parseCoachJSON(raw);
     typing.remove();
     chatMessages.push({role:'assistant', content: parsed.reply || raw});
     renderChat(); saveChat();
+    if(parsed.memory_note){
+      await addMemoryNote(parsed.memory_note, 'weekly-review');
+      renderMemoryPanelIfOpen();
+    }
   }catch(e){
     typing.remove();
     chatMessages.push({role:'assistant', content:'Could not reach the coach: '+e.message});
@@ -960,6 +1073,15 @@ async function init(){
   document.getElementById('chatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
   document.getElementById('weeklyReviewBtn').onclick = weeklyReview;
   document.getElementById('gearBtn').onclick = ()=>{ secrets.apiKey=''; saveSecrets(); renderCoachSetup(); showToast('Disconnected — add a key to reconnect'); };
+  document.getElementById('memoryBtn').onclick = ()=>{ memoryPanelOpen = !memoryPanelOpen; renderMemoryPanel(); };
+  document.getElementById('addMemoryBtn').onclick = async ()=>{
+    const input = document.getElementById('newMemoryNote');
+    if(!input.value.trim()) return;
+    await addMemoryNote(input.value.trim(), 'manual');
+    input.value = '';
+    renderMemoryPanel();
+    showToast('Added to memory');
+  };
   document.getElementById('logWorkoutBtn').onclick = async ()=>{
     if(selectedMuscles.size===0){ showToast('Pick at least one muscle group'); return; }
     const note = document.getElementById('workoutNote').value.trim();
