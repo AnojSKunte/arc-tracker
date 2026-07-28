@@ -405,6 +405,10 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const ACTIVE_LABEL = {retinol:'Retinol night', glycolic:'Glycolic + Kojic night', niacinamide:'Niacinamide night'};
 const ACTIVE_CLASS = {retinol:'active-retinol', glycolic:'active-glycolic', niacinamide:'active-niacinamide'};
 
+const pad = n => String(n).padStart(2,'0');
+const dateKey = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const todayKey = () => dateKey(new Date());
+
 let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 let activeLog = {am:{}, pm:{}, sup:{}, workout:null};
 let activeDateStr = todayKey();
@@ -414,10 +418,6 @@ let chatMessages = [];
 const MUSCLE_GROUPS = ['Chest','Back','Legs','Shoulders','Arms','Core'];
 const QUICK_PROMPTS = ["How's my week?", "Am I balanced across muscle groups?", "What should I focus on tonight?", "Rate my adherence honestly"];
 let selectedMuscles = new Set();
-
-const pad = n => String(n).padStart(2,'0');
-const dateKey = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-const todayKey = () => dateKey(new Date());
 
 /* ================= Storage ================= */
 async function loadConfig(){
@@ -492,14 +492,16 @@ function renderHeader(){
   let pct = (hour - 6) / (23 - 6);
   pct = Math.max(0, Math.min(1, pct));
   document.getElementById('dayProgressLabel').textContent = Math.round(pct*100) + '% through today';
-  const path = document.getElementById('arcProgress');
-  const len = path.getTotalLength();
-  path.setAttribute('stroke-dasharray', len);
-  path.setAttribute('stroke-dashoffset', len * (1-pct));
-  const point = path.getPointAtLength(len*pct);
-  const sunMoon = document.getElementById('sunMoon');
-  sunMoon.setAttribute('cx', point.x); sunMoon.setAttribute('cy', point.y);
-  sunMoon.setAttribute('fill', pct < 0.55 ? '#8FD3FF' : '#6F63D8');
+  try{
+    const path = document.getElementById('arcProgress');
+    const len = path.getTotalLength();
+    path.setAttribute('stroke-dasharray', len);
+    path.setAttribute('stroke-dashoffset', len * (1-pct));
+    const point = path.getPointAtLength(len*pct);
+    const sunMoon = document.getElementById('sunMoon');
+    sunMoon.setAttribute('cx', point.x); sunMoon.setAttribute('cy', point.y);
+    sunMoon.setAttribute('fill', pct < 0.55 ? '#8FD3FF' : '#6F63D8');
+  }catch(e){ /* SVG geometry APIs occasionally unavailable — arc is decorative, rest of the app must not depend on it */ }
 }
 
 /* ================= Today view (date-aware: operates on activeLog / activeDateStr) ================= */
